@@ -1,0 +1,180 @@
+---
+title: "p8105_hw2_lz3015"
+output: github_document
+date: "2025-09-30"
+---
+## Loading packages
+```{r}
+library(tidyverse)
+library(dplyr)
+```
+
+## Problem 1
+cleaning pols-month
+```{r}
+pols_df = 
+  read.csv(
+    "./fivethirtyeight_data/pols-month.csv") |> 
+  janitor::clean_names() |> 
+  separate(mon, into = c("year", "month", "day"), sep = "-") |> 
+  mutate(
+    year = as.integer(year),
+    month = as.integer(month),
+    month = month.name[month], 
+    president= if_else(prez_gop == 1, "gop", "dem")
+  ) |> 
+  select(-prez_dem, -prez_gop, -day) #drops these variables
+```
+cleaning snp
+```{r}
+snp_df = 
+  read.csv(
+    "./fivethirtyeight_data/snp.csv") |> 
+  janitor::clean_names() |> 
+  separate(date, into = c("month", "day", "year"), sep = "/") |> 
+  mutate(
+    year = as.integer(year),
+    year = if_else(year > 20, 1900 + year, 2000 + year),
+    month = as.integer(month),
+    month = month.name[month], 
+  ) |> 
+  select(-day) |> 
+  arrange(year)
+```
+cleaning and tidying unemployment
+```{r}
+unemployment_df = 
+    read.csv(
+      "./fivethirtyeight_data/unemployment.csv") |>
+  rename(year = Year) |> # removing capital y for consistency
+  pivot_longer(
+    Jan:Dec,
+    names_to = "month",
+    values_to = "unemployment") |> 
+  mutate(
+    month = match(month, month.abb),
+    month = month.name[month]
+  )
+    
+```
+Joining the three datasets
+```{r}
+# join with unemployment data
+join_df = pols_df |>
+  left_join(snp_df, by = c("year", "month")) |>
+  left_join(unemployment_df, by = c("year", "month"))
+```
+
+## Data description:
+The `pols_df` data contains 822 observations related to the number of national politicians who are democratic or republican at any given time.
+This data set contains information as early as January 1947 and goes all the way to June of 2015 and there are `r ncol(pols_df)` variables
+
+The `snp_df` data contains 787 observations related to Standard & Poor’s stock market index (S&P) represented by the variable "close" (the closing 
+values of the S&P stock index on the associated date),often used as a representative measure of stock market as a whole. This data was also tracked
+over time starting in February of 2001 and ending in 2012 and there are `r ncol(snp_df)` variables
+
+The `unemployment_df` data contains 816 observations detailing the unemployment rate between January 1948 and December 2015 and there are
+`r ncol(unemployment_df)` variables
+
+The `join_df` data is the combination of the three data sets described above with `r nrow(join_df)` observations and `r ncol(join_df)` variables
+
+
+
+## Problem 2
+```{r}
+library(readxl)
+```
+Mr. Trash Wheel
+```{r}
+mr_trash_df = read_excel("trashwheel_data/202509 Trash Wheel Collection Data.xlsx",
+    sheet = "Mr. Trash Wheel",
+    skip = 1) |> 
+  janitor::clean_names() |> 
+  select(-starts_with("x")) |>  # drops empty columns
+  filter(!is.na(dumpster)) |>
+  mutate(
+    sports_balls = as.integer(round(sports_balls)),
+    trash_wheel = "Mr. Trash Wheel",
+    year = as.integer(year) # Need to standardize data type for year for future joins
+  )
+```
+
+```{r}
+prof_trash_df = read_excel("trashwheel_data/202509 Trash Wheel Collection Data.xlsx",
+    sheet = "Professor Trash Wheel",
+    skip = 1) |> 
+  janitor::clean_names() |> 
+  select(-starts_with("x")) |>  # drops empty columns
+  filter(!is.na(dumpster)) |>
+  mutate(
+    trash_wheel = "Professor Trash Wheel",
+    year = as.integer(year) # Need to standardize data type for year for future joins
+  )
+```
+
+```{r}
+gwynnda_trash_df = read_excel("trashwheel_data/202509 Trash Wheel Collection Data.xlsx",
+    sheet = "Gwynns Falls Trash Wheel",
+    skip = 1) |> 
+  janitor::clean_names() |> 
+  select(-starts_with("x")) |>  # drops empty columns
+  filter(!is.na(dumpster)) |>
+  mutate(
+    trash_wheel = "Gwynns Falls Trash Wheel" ,
+    year = as.integer(year) # Need to standardize data type for year for future joins
+  )
+```
+
+```{r}
+all_trash_df = 
+  bind_rows(
+    mr_trash_df,
+    prof_trash_df,
+    gwynnda_trash_df
+)
+```
+
+The `mr_trash_df` data contains `r nrow(mr_trash_df)` observations and `r ncol(mr_trash_df)` variables. 
+The `prof_trash_df` data contains `r nrow(prof_trash_df)` observations and `r ncol(prof_trash_df)` variables. 
+The `gwynnda_trash_df` data contains `r nrow(gwynnda_trash_df)` observations and `r ncol(gwynnda_trash_df)` variables. 
+`weight_tons` and `volume_cubic_yards` are among the main descriptive variables that illustrate the magnitude of the trash collected.
+The average weight collected on a given day in tons for each wheel is:
+Mr. Trash Wheel = `r round(mean(mr_trash_df$weight_tons, na.rm = TRUE), 1)`;
+Professor Trash Wheel = `r round(mean(prof_trash_df$weight_tons, na.rm = TRUE), 1)`;
+Gwynnda Trash Wheel = `r round(mean(gwynnda_trash_df$weight_tons, na.rm = TRUE), 1)`;
+The overall average `weight_tons` from the combined `all_trash_df` is `r round(mean(all_trash_df$weight_tons, na.rm = TRUE), 1)`
+The recorded data spans from `r min(all_trash_df$year, na.rm = TRUE)` to `r max(all_trash_df$year, na.rm = TRUE)`
+
+## Problem 3
+```{r}
+zip_df = 
+  read.csv (
+  "./zillow_data/Zip Codes.csv") |> 
+  janitor::clean_names() |> 
+  rename(
+    borough = county
+  )
+
+#Renaming borough names
+zip_df = zip_code |> 
+  mutate(
+    borough = recode(
+      borough,
+      "Kings" = "Brooklyn",
+      "New York" = "Manhattan",
+      "Richmond" = "Staten Island"))
+```
+
+
+```{r}
+rental_df <- read.csv("./zillow_data/Zip_zori_uc_sfrcondomfr_sm_month_NYC.csv") |>
+  janitor::clean_names() |>
+  # Pivot to long format
+  pivot_longer(
+    cols = x2015_01_31:x2018_05_31,
+    names_to = "date",
+    values_to = "rental_price")
+```
+
+
+
