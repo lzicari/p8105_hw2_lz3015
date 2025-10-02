@@ -285,7 +285,7 @@ price_comparison_table = zori_zip_join |>
 ```
 All of the neighborhoods with the largest drop in ziro scores were located in Manhattan which was hit particularly hard by the COVID-19
 pandemic. COVID-19 spreads more rapidly in high population density environments which likely drove fear into the Manhattan rental 
-market causing rental prices to drop dramatically during the pandemic. 
+market causing rental prices to drop dramatically during the pandemic.
 
 
 
