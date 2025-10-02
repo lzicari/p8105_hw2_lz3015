@@ -155,26 +155,138 @@ zip_df =
     borough = county
   )
 
-#Renaming borough names
-zip_df = zip_code |> 
+#Renaming borough names 
+zip_df = zip_df |> 
   mutate(
     borough = recode(
-      borough,
-      "Kings" = "Brooklyn",
-      "New York" = "Manhattan",
-      "Richmond" = "Staten Island"))
+    borough,
+    "Richmond" = "Staten Island",
+    "New York" = "Manhattan",
+    "Kings" = "Brooklyn"
+))
+```
+View df to make sure columns have proper labels and boroughs were recoded
+```{r}
+view(zip_df)
+```
+After looking at view, we should check for zip code duplicates
+```{r}
+zip_df |> 
+  group_by(zip_code) |> 
+  filter(n() > 1) |> 
+  ungroup()
+```
+Remove duplicates:
+```{r}
+zip_df_unique = zip_df |> 
+  distinct(zip_code, .keep_all = TRUE)
+view(zip_df_unique)
 ```
 
+
+
+##clean repeat Zips
+all dates start with X so filter
+```{r}
+zori_df =
+  read.csv(
+    "./zillow_data/Zip_zori_uc_sfrcondomfr_sm_month_NYC.csv") |>
+  janitor::clean_names() 
+  view(zori_df)
+```
 
 ```{r}
-rental_df <- read.csv("./zillow_data/Zip_zori_uc_sfrcondomfr_sm_month_NYC.csv") |>
-  janitor::clean_names() |>
+zori_tidy = zori_df |> 
   # Pivot to long format
   pivot_longer(
-    cols = x2015_01_31:x2018_05_31,
+    cols = starts_with("x"),
     names_to = "date",
-    values_to = "rental_price")
+    values_to = "zori") |> 
+  mutate(
+    date = str_remove(date, "x"),
+  ) |> 
+    separate(date, into = c("year", "month", "day"), sep = "_") |> 
+  mutate(
+    year = as.integer(year),
+    month = as.integer(month),
+    month = month.name[month]) |>
+  mutate(
+    county_name = recode(
+      county_name,
+    "Richmond County" = "Staten Island",
+    "New York County" = "Manhattan",
+    "Kings County" = "Brooklyn",
+    "Queens County" = "Queens",
+    "Bronx County" = "Bronx")) |> 
+  rename(borough = county_name, zip_code = region_name, zori_year = year, zori_month = month) |>
+  select(-day)
+
 ```
+view df to check that pivot worked accordingly
+```{r}
+view(zori_tidy)
+```
+
+join zori dataframe with zip dataframe on zip_code
+```{r}
+zori_zip_join = zori_tidy|> 
+  left_join(zip_df_unique, by = "zip_code") |> 
+  select ( metro, borough.x, neighborhood, zip_code, zori_year, zori_month, zori,)
+
+view(zori_zip_join)
+```
+
+# Joined data descriptors
+```{r}
+total_observations = nrow(zori_zip_join)
+print(paste("Total observations:", total_observations))
+
+unique_zips = n_distinct(zori_zip_join$zip_code)
+print(paste("Unique ZIP codes:", unique_zips))
+
+unique_neighborhoods = n_distinct(zori_zip_join$neighborhood)
+print(paste("Unique neighborhoods:", unique_neighborhoods))
+```
+In the joined dataset, there are 17284 total observations, 149 unique zip codes and 43 unique neighborhoods
+
+
+# Find the ZIP codes that are in zip_df_unique but not in zori_tidy
+```{r}
+missing_zips = zip_df_unique |>
+  anti_join(zori_tidy, by = "zip_code")
+view(missing_zips)
+num_missing_zips <- nrow(missing_zips)
+print(num_missing_zips)
+```
+There were 171 zip codes that were in the zip code dataset but not in the zori data set. This could be due to many reasons such as heavy
+commercial/industrial or private use within these zip codes that prevent rental activity. For example, after a quick google search the zip code
+10464 was City Island in the Bronx that is a very small island with what appears to be beaches, parks and small shops. It is very 
+likely that the rental activity is very low here which is why this zip code does not have a zori score.  
+
+# Covid comparison
+```{r}
+price_comparison_table = zori_zip_join |> 
+  # Filter for January 2020 and January 2021 data
+  filter(zori_year %in% c(2020, 2021), zori_month == "January") |> 
+  select(zip_code, borough.x, neighborhood, zori, zori_year) |> 
+  # Pivot to a wider format to compare prices
+  pivot_wider(
+    names_from = zori_year,
+    values_from = zori,
+    names_prefix = "zori_"
+  ) |> 
+  # Calculate the change in price
+  mutate(zori_change = round(zori_2021 - zori_2020, digits = 0)) |> 
+  arrange(zori_change) |> 
+  # Select the top 10 rows
+   slice_head(n = 10) |>
+  select(zip_code, borough.x, neighborhood, zori_change)
+  print(price_comparison_table)
+```
+All of the neighborhoods with the largest drop in ziro scores were located in Manhattan which was hit particularly hard by the COVID-19
+pandemic. COVID-19 spreads more rapidly in high population density environments which likely drove fear into the Manhattan rental 
+market causing rental prices to drop dramatically during the pandemic. 
+
 
 
 
